@@ -1617,8 +1617,16 @@ namespace platf::audio {
       auto current_default_dev = default_device(device_enum);
       if (current_default_dev) {
         audio::wstring_t current_default_id;
+        // master grew an assignment_epoch parameter on try_reset_from_steam after
+        // this call site was written. There is no assignment in flight here, so
+        // pass the current epoch: policy_assignment_is_current() is then trivially
+        // true and the staleness guard is a no-op, matching the original intent of
+        // acting unconditionally. Deliberately not calling begin_policy_assignment()
+        // -- it bumps the epoch and records desired IDs, which must not happen in a
+        // fallback that can fall through to reset_default_device_impl() below.
         if (SUCCEEDED(current_default_dev->GetId(&current_default_id)) &&
-            try_reset_from_steam(current_default_id.get()) == reset_result_e::success) {
+            try_reset_from_steam(current_default_id.get(), policy_assignment_epoch_ref()) ==
+              reset_result_e::success) {
           return;
         }
       }
