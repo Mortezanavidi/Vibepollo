@@ -1125,6 +1125,8 @@ namespace platf::audio {
           f << prev_name;
           BOOST_LOG(debug) << "Render restore guard: state file written: pre-session default = " << prev_name;
         }
+      }
+
       // Cancel immediately before replacing the defaults so a failed format
       // setup leaves the existing recovery worker intact.
       const auto current_default_ids = current_default_device_ids();
