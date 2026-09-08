@@ -1,0 +1,19 @@
+name: Windows microphone and clipboard build
+on:
+  push:
+    branches: [codex/mic-clipboard]
+  workflow_dispatch: {}
+permissions:
+  contents: read
+  actions: read
+jobs:
+  windows:
+    uses: ./.github/workflows/ci-windows.yml
+    with:
+      release_commit: ${{ github.sha }}
+      release_version: 0.0.0-mic-clipboard
+      symbol_product_name: Vibepollo
+      symbol_release_prefix: vibepollo
+      require_signpath_signing: false
+      publish_symbols: false
+    secrets: inherit
