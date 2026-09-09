@@ -54,6 +54,7 @@
 #include "state_storage.h"
 #include "update.h"
 #ifdef _WIN32
+  #include "platform/windows/clipboard_transfer.h"
   #include "platform/windows/display.h"
   #include "platform/windows/display_helper_request_helpers.h"
   #include "platform/windows/misc.h"
@@ -3641,6 +3642,30 @@ namespace nvhttp {
     response->close_connection_after_response = true;
   }
 
+  #ifdef _WIN32
+  void syncClipboard(resp_https_t response, req_https_t request) {
+    auto cert = get_verified_cert(request);
+    const auto sessions = rtsp_stream::get_all_session_uuids();
+    if (!has_client_perm(cert, PERM::_allow_view) ||
+        std::find(sessions.begin(), sessions.end(), cert->uuid) == sessions.end()) {
+      response->write(SimpleWeb::StatusCode::client_error_forbidden);
+      return;
+    }
+    response->close_connection_after_response = true;
+    try {
+      if (request->content.size() > 2 * 1024 * 1024) throw std::runtime_error("Clipboard request too large");
+      auto body = nlohmann::json::parse(request->content.string());
+      auto result = clipboard_transfer::handle(cert->uuid,
+        {has_client_perm(cert, PERM::clipboard_read), has_client_perm(cert, PERM::clipboard_set),
+         has_client_perm(cert, PERM::file_dwnload), has_client_perm(cert, PERM::file_upload)}, body);
+      response->write(result.dump());
+    } catch (const std::exception &) {
+      // Do not log clipboard contents, file paths, or transfer tokens.
+      response->write(SimpleWeb::StatusCode::client_error_bad_request);
+    }
+  }
+  #endif
+
   void getClipboard(resp_https_t response, req_https_t request) {
     print_req<SunshineHTTPS>(request);
 
@@ -3994,6 +4019,9 @@ namespace nvhttp {
     };
     https_server.resource["^/actions/clipboard$"]["GET"] = getClipboard;
     https_server.resource["^/actions/clipboard$"]["POST"] = setClipboard;
+    #ifdef _WIN32
+    https_server.resource["^/actions/clipboard/v1$"]["POST"] = syncClipboard;
+    #endif
     https_server.resource["^/bitrate$"]["GET"] = setBitrate;
     https_server.resource["^/api/abr/capabilities$"]["GET"] = getAbrCapabilities;
 
