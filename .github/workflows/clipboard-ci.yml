@@ -1,4 +1,7 @@
 name: Windows microphone and clipboard build
+concurrency:
+  group: clipboard-${{ github.ref }}
+  cancel-in-progress: true
 on:
   push:
     branches: [codex/mic-clipboard]
