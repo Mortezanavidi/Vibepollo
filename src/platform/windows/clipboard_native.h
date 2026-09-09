@@ -3,6 +3,7 @@
 #include <WinSock2.h>
 #include <windows.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #include <algorithm>
 #include <cstdint>
 #include <filesystem>
