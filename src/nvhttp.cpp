@@ -3657,7 +3657,8 @@ namespace nvhttp {
       auto body = nlohmann::json::parse(request->content.string());
       auto result = clipboard_transfer::handle(cert->uuid,
         {has_client_perm(cert, PERM::clipboard_read), has_client_perm(cert, PERM::clipboard_set),
-         has_client_perm(cert, PERM::file_dwnload), has_client_perm(cert, PERM::file_upload)}, body);
+         has_client_perm(cert, PERM::file_dwnload), has_client_perm(cert, PERM::file_upload)}, body,
+        [] { return crypto::rand_alphabet(32, "0123456789abcdef"); });
       response->write(result.dump());
     } catch (const std::exception &) {
       // Do not log clipboard contents, file paths, or transfer tokens.

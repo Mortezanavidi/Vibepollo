@@ -1,4 +1,5 @@
 #include "src/platform/windows/clipboard_native.h"
+#include "src/platform/windows/clipboard_transfer.h"
 #include <iostream>
 
 int main() {
@@ -42,6 +43,39 @@ int main() {
     clip::publish(files, GetClipboardSequenceNumber());
     clip::require(clip::read().files == files.files);
     clip::publish(text, GetClipboardSequenceNumber());
+    namespace transfer = clipboard_transfer;
+    using json = transfer::json;
+    int counter = 0;
+    auto random = [&] { return "test-" + std::to_string(GetCurrentProcessId()) + "-" + std::to_string(++counter); };
+    transfer::permissions all {true, true, true, true}, none {false, false, false, false};
+    auto run = [&](const json &request) { return transfer::handle("test", all, request, random); };
+    auto rejects = [&](auto operation) { bool failed = false; try { operation(); } catch (...) { failed = true; } clip::require(failed); };
+    rejects([&] { transfer::handle("test", none, json {{"action", "state"}}, random); });
+    auto begin = json {{"action", "begin"}, {"sequence", GetClipboardSequenceNumber()},
+                       {"files", json::array({{{"name", "test.bin"}, {"size", data.size()}}})}};
+    auto bad = begin; bad["files"][0]["name"] = "../escape";
+    rejects([&] { run(bad); });
+    bad = begin; bad["files"][0]["size"] = -1;
+    rejects([&] { run(bad); });
+    auto token = run(begin).at("token");
+    auto write = json {{"action", "write"}, {"token", token}, {"index", 0}, {"offset", 0}, {"data", clip::hex(data)}};
+    bad = write; bad["offset"] = 1;
+    rejects([&] { run(bad); });
+    rejects([&] { run(json {{"action", "finish"}, {"token", token}}); });
+    run(write);
+    run(json {{"action", "finish"}, {"token", token}});
+    auto state = run(json {{"action", "state"}});
+    auto read = json {{"action", "read"}, {"token", state.at("token")}, {"index", 0}, {"offset", 0}};
+    clip::require(clip::unhex(run(read).at("data").get<std::string>()) == data);
+    rejects([&] { transfer::handle("other-client", all, read, random); });
+    rejects([&] { transfer::handle("test", none, read, random); });
+    bad = read; bad["index"] = 1;
+    rejects([&] { run(bad); });
+    clip::publish(text, GetClipboardSequenceNumber());
+    rejects([&] { run(read); });
+    transfer::downloads.clear();
+    transfer::uploads.at("test")->complete = false;
+    transfer::uploads.clear();
     clip::fs::remove(path); clip::fs::remove(directory);
     std::cout << "Clipboard native tests passed\n";
     return 0;

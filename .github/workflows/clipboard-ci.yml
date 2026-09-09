@@ -12,10 +12,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ilammy/msvc-dev-cmd@v1
+      - name: Fetch JSON headers for standalone protocol tests
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path test-include/nlohmann -Force | Out-Null
+          Invoke-WebRequest https://raw.githubusercontent.com/nlohmann/json/v3.11.3/single_include/nlohmann/json.hpp -OutFile test-include/nlohmann/json.hpp
       - name: Test Windows clipboard and file bounds
         shell: cmd
         run: |
-          cl /nologo /std:c++17 /EHsc /I. tests\clipboard_native_standalone.cpp /Fe:clipboard-tests.exe user32.lib shell32.lib
+          cl /nologo /std:c++17 /EHsc /I. /Itest-include tests\clipboard_native_standalone.cpp /Fe:clipboard-tests.exe user32.lib shell32.lib
           if errorlevel 1 exit /b 1
           clipboard-tests.exe
   windows:

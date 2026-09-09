@@ -1,6 +1,5 @@
 #pragma once
 #include "clipboard_native.h"
-#include "src/crypto.h"
 #include <chrono>
 #include <map>
 #include <mutex>
@@ -31,7 +30,6 @@ namespace clipboard_transfer {
   inline std::mutex mutex;
   inline std::map<std::string, std::unique_ptr<transfer>> downloads, uploads;
   inline std::uint64_t stored_bytes = 0;
-  inline std::string token() { return crypto::rand_alphabet(32, "0123456789abcdef"); }
   inline void expire(std::map<std::string, std::unique_ptr<transfer>> &map) {
     for (auto it = map.begin(); it != map.end();) {
       if (std::chrono::steady_clock::now() - it->second->touched > std::chrono::minutes(10)) it = map.erase(it);
@@ -44,7 +42,8 @@ namespace clipboard_transfer {
     it->second->touched = std::chrono::steady_clock::now();
     return *it->second;
   }
-  inline json handle(const std::string &owner, permissions perms, const json &request) {
+  template<class TokenFactory>
+  inline json handle(const std::string &owner, permissions perms, const json &request, TokenFactory new_token) {
     std::lock_guard<std::mutex> lock(mutex);
     expire(downloads); expire(uploads);
     const auto action = request.at("action").get<std::string>();
@@ -59,7 +58,7 @@ namespace clipboard_transfer {
         if (!perms.download) return {{"sequence", value.sequence}, {"kind", "unsupported"}};
         native::require(downloads.count(owner) || downloads.size() < 16);
         auto item = std::make_unique<transfer>();
-        item->token = token(); item->sequence = value.sequence;
+        item->token = new_token(); item->sequence = value.sequence;
         out["files"] = json::array();
         std::uint64_t total = 0;
         for (const auto &path : value.files) {
@@ -112,7 +111,7 @@ namespace clipboard_transfer {
       auto expected = request.at("sequence").get<std::uint64_t>();
       native::require(expected <= MAXDWORD && GetClipboardSequenceNumber() == expected);
       auto item = std::make_unique<transfer>();
-      item->token = token(); item->sequence = static_cast<DWORD>(expected);
+      item->token = new_token(); item->sequence = static_cast<DWORD>(expected);
       item->directory = native::fs::temp_directory_path() / ("Vibepollo-Clipboard-" + item->token);
       native::require(native::fs::space(item->directory.parent_path()).available > total + 16 * 1024 * 1024);
       native::require(native::fs::create_directory(item->directory));
