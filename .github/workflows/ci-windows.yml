@@ -143,7 +143,13 @@ jobs:
         with:
           ref: ${{ inputs.release_commit }}
           fetch-depth: 0
-          submodules: recursive
+          submodules: false
+
+      - name: Checkout pinned dependencies
+        shell: pwsh
+        run: |
+          git submodule update --init --recursive --depth 1 --jobs 8
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Resolve Windows build version
         shell: pwsh
