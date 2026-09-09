@@ -23,7 +23,7 @@ jobs:
       - name: Test Windows clipboard and file bounds
         shell: cmd
         run: |
-          cl /nologo /std:c++17 /EHsc /I. /Itest-include tests\clipboard_native_standalone.cpp /Fe:clipboard-tests.exe user32.lib shell32.lib
+          cl /nologo /std:c++17 /EHsc /I. /Itest-include tests\clipboard_native_standalone.cpp /Fe:clipboard-tests.exe user32.lib shell32.lib advapi32.lib ole32.lib wtsapi32.lib uuid.lib
           if errorlevel 1 exit /b 1
           clipboard-tests.exe
   windows:

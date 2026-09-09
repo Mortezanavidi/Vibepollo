@@ -1,5 +1,6 @@
 #pragma once
 #include "clipboard_native.h"
+#include <WtsApi32.h>
 #include <chrono>
 #include <map>
 #include <mutex>
@@ -9,6 +10,40 @@
 namespace clipboard_transfer {
   namespace native = clipboard_native;
   using json = nlohmann::json;
+  // The service launches Sunshine as SYSTEM in the interactive session. Perform
+  // clipboard file I/O as that session's user, so pasted files remain readable
+  // and a clipboard path never grants the client SYSTEM filesystem privileges.
+  struct session_user {
+    std::shared_ptr<void> token;
+    bool impersonated = false;
+    native::fs::path temp;
+    session_user() {
+      HANDLE process_token = nullptr;
+      native::require(OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &process_token));
+      auto process = std::shared_ptr<void>(process_token, [](void *v) { CloseHandle(v); });
+      DWORD size = 0;
+      GetTokenInformation(process_token, TokenUser, nullptr, 0, &size);
+      native::require(size > 0);
+      std::vector<BYTE> storage(size);
+      native::require(GetTokenInformation(process_token, TokenUser, storage.data(), size, &size));
+      const auto info = reinterpret_cast<const TOKEN_USER *>(storage.data());
+      if (IsWellKnownSid(info->User.Sid, WinLocalSystemSid)) {
+        DWORD session = 0;
+        native::require(ProcessIdToSessionId(GetCurrentProcessId(), &session));
+        HANDLE user_token = nullptr;
+        native::require(WTSQueryUserToken(session, &user_token));
+        token = std::shared_ptr<void>(user_token, [](void *v) { CloseHandle(v); });
+      }
+      PWSTR appdata = nullptr;
+      native::require(SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, token.get(), &appdata)));
+      try { temp = native::fs::path(appdata) / L"Temp"; } catch (...) { CoTaskMemFree(appdata); throw; }
+      CoTaskMemFree(appdata);
+      if (token) { native::require(ImpersonateLoggedOnUser(token.get())); impersonated = true; }
+    }
+    ~session_user() { if (impersonated) RevertToSelf(); }
+    session_user(const session_user &) = delete;
+    session_user &operator=(const session_user &) = delete;
+  };
   struct permissions { bool read, write, download, upload; };
   struct transfer {
     std::string token;
@@ -45,6 +80,7 @@ namespace clipboard_transfer {
   template<class TokenFactory>
   inline json handle(const std::string &owner, permissions perms, const json &request, TokenFactory new_token) {
     std::lock_guard<std::mutex> lock(mutex);
+    session_user user;
     expire(downloads); expire(uploads);
     const auto action = request.at("action").get<std::string>();
     if (action == "state") {
@@ -112,7 +148,8 @@ namespace clipboard_transfer {
       native::require(expected <= MAXDWORD && GetClipboardSequenceNumber() == expected);
       auto item = std::make_unique<transfer>();
       item->token = new_token(); item->sequence = static_cast<DWORD>(expected);
-      item->directory = native::fs::temp_directory_path() / ("Vibepollo-Clipboard-" + item->token);
+      native::fs::create_directories(user.temp);
+      item->directory = user.temp / ("Vibepollo-Clipboard-" + item->token);
       native::require(native::fs::space(item->directory.parent_path()).available > total + 16 * 1024 * 1024);
       native::require(native::fs::create_directory(item->directory));
       for (const auto &entry : manifest) {

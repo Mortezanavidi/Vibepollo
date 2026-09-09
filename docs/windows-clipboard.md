@@ -23,7 +23,9 @@ another copy replaces it, copy it again. Each host process/client connection has
 a 1 GiB incoming transfer budget; restart/reconnect when it is exhausted.
 
 Received files are retained in randomly named `Vibepollo-Clipboard-*` or
-`Vibelight-Clipboard-*` folders under that process's Windows temporary directory.
+`Vibelight-Clipboard-*` folders under the user's Windows temporary directory.
+The host uses the signed-in user's file permissions even when its service runs
+as SYSTEM.
 They are copies: deleting the original on the other PC does not remove them.
 After pasting files somewhere permanent, these temporary folders can be removed
 when they are no longer on the clipboard or in use. Incomplete host transfers are
